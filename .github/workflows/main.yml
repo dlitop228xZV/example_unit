@@ -1,0 +1,52 @@
+name: C++ Tests (MSVC)
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build_and_test:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [ Release, Debug ]
+        platform: [ x64 ]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Restore NuGet packages
+        run: nuget restore example_unit.sln
+
+      - name: Build
+        run: msbuild example_unit.sln /m /p:Configuration=${{ matrix.config }} /p:Platform=${{ matrix.platform }}
+
+      - name: Run tests (vstest)
+        shell: pwsh
+        run: |
+          # Найти vstest.console.exe через vswhere
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          if (!(Test-Path $vswhere)) { throw "vswhere.exe not found" }
+
+          $vsPath = & $vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+          if (!$vsPath) { throw "Visual Studio installation not found" }
+
+          $vstest = Join-Path $vsPath "Common7\IDE\Extensions\TestPlatform\vstest.console.exe"
+          if (!(Test-Path $vstest)) { throw "vstest.console.exe not found at $vstest" }
+
+          # После сборки тестовая DLL обычно лежит в папках Debug/Release. Найдём её по имени проекта TEST
+          $testDll = Get-ChildItem -Recurse -File -Filter "TEST.dll" | Select-Object -First 1
+          if (!$testDll) { throw "TEST.dll not found. Build may have failed or output name differs." }
+
+          & $vstest $testDll.FullName
