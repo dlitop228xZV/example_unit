@@ -1,20 +1,19 @@
 #include "Person.h"
 
-#define MAX_NAME_SIZE 40
-#define CHECK_NAME_SIZE name.size() > MAX_NAME_SIZE
-#define CHECK_AGE age < 0 || age > 100
-#define CHECK_GENDER gender < UNDEF || gender > FEMALE
-
-Person::Person(string n, int a, Gender g) : name{ n }, age{ a }, gender{ g }
+Person::Person(string n, int a, Gender g)
+    : name{ n }, age{ a }, gender{ g }
 {
-	if (CHECK_NAME_SIZE)
-		name.resize(MAX_NAME_SIZE);
-	
-	if (CHECK_AGE)
-		age = 0;
+    if (name.empty())
+        name = "NoName";
 
-	if (CHECK_GENDER)
-		gender = UNDEF;
+    if (name.size() > 40)
+        name.resize(40);
+
+    if (age < 0 || age > 100)
+        age = 0;
+
+    if (gender < UNDEF || gender > FEMALE)
+        gender = UNDEF;
 }
 
 Person::Person(string n, int a) : Person(n,a,Person::UNDEF)
