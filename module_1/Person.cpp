@@ -1,5 +1,5 @@
 #include "Person.h"
-
+ 
 Person::Person(string n, int a, Gender g)
     : name{ n }, age{ a }, gender{ g }
 {
