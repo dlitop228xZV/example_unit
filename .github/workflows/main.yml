@@ -4,36 +4,52 @@ on: [push, pull_request]
 
 jobs:
   build-and-test:
-    # Use a Windows runner as the tests depend on the Visual Studio environment
     runs-on: windows-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v2
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
 
-    - name: Setup Visual Studio environment
-      # This action sets up the necessary environment variables for MSVC build tools
-      uses: ilammy/msvc-dev-cmd@v1.4.1
-      # You can specify the architecture, e.g., 'x64' or 'x86'
-      with:
-        arch: x64
+      - name: Setup Visual Studio environment
+        uses: ilammy/msvc-dev-cmd@v1.4.1
+        with:
+          arch: x64
 
-    - name: Build Solution
-      # Use MSBuild to compile the entire solution, including the test projects
-      run: msbuild example_unit.sln /p:Configuration=Debug /p:Platform=x64
+      - name: Restore NuGet packages
+        shell: powershell
+        run: nuget restore .\example_unit.sln
 
-    - name: Run C++ tests with VSTest
-      # Use the path found in the previous step
-      run:  vstest.console.exe x64/debug/TEST.dll /Platform:x64 /Logger:trx
-      # The VSTest action marketplace has some issues/deprecations, so manual execution is safer
-      shell: cmd
-      
-    - name: Upload test results artifact (optional)
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: 'tests/latest.trx' # Upload the .trx results file
+      - name: Build solution
+        shell: powershell
+        run: msbuild .\example_unit.sln /p:Configuration=Debug /p:Platform=x64 /m
 
+      - name: Find VSTest
+        id: vstest
+        shell: powershell
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vstest = & $vswhere -latest -products * -find "Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe" | Select-Object -First 1
+          if (-not $vstest) { throw "vstest.console.exe not found" }
+          "path=$vstest" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Find test DLL
+        id: testdll
+        shell: powershell
+        run: |
+          $dll = Get-ChildItem -Recurse -Filter TEST.dll | Select-Object -First 1
+          if (-not $dll) { throw "TEST.dll not found" }
+          "path=$($dll.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Run tests
+        shell: powershell
+        run: |
+          & "${{ steps.vstest.outputs.path }}" "${{ steps.testdll.outputs.path }}" /Platform:x64 /Logger:"trx;LogFileName=test-results.trx"
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/test-results.trx'
